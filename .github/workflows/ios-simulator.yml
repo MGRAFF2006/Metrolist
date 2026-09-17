@@ -48,6 +48,7 @@ jobs:
             -configuration Debug \
             -destination "generic/platform=iOS Simulator" \
             -derivedDataPath iosApp/build/xcode-derived \
+            ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Package simulator app
