@@ -95,6 +95,10 @@ output-metadata.json
 # VS Code
 .vscode/
 
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+
 # Binary files and core dumps
 core
 core.*

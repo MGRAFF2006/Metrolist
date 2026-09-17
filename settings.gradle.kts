@@ -24,6 +24,8 @@ dependencyResolutionManagement {
                     includeModule("com.github.MetrolistGroup", "innertubex")
                     includeModule("com.github.MetrolistGroup", "innertubex-android")
                     includeModule("com.github.MetrolistGroup", "innertubex-desktop")
+                    includeModule("com.github.MetrolistGroup", "innertubex-iosarm64")
+                    includeModule("com.github.MetrolistGroup", "innertubex-iossimulatorarm64")
                 } else {
                     includeGroup("com.github.MetrolistGroup.innertubex")
                 }
@@ -40,3 +42,4 @@ dependencyResolutionManagement {
 rootProject.name = "Metrolist"
 include(":app")
 include(":innertube")
+include(":iosApp")

@@ -11,7 +11,6 @@ import com.metrolist.innertube.models.YTItem
 import com.metrolist.innertube.models.splitArtistsByConjunction
 import com.metrolist.innertube.models.splitBySeparator
 import com.metrolist.innertube.utils.parseTime
-import timber.log.Timber
 
 data class ArtistItemsPage(
     val title: String,
@@ -116,7 +115,7 @@ data class ArtistItemsPage(
                     }
                     
                     if (artists.isEmpty()) {
-                        Timber.w("ArtistItemsPage.fromMusicTwoRowItemRenderer: Song '$title' (id=$videoId) - SUBTITLE RUNS EXIST but parsing returned EMPTY")
+                        ParserLog.w("ArtistItemsPage.fromMusicTwoRowItemRenderer: Song '$title' (id=$videoId) - SUBTITLE RUNS EXIST but parsing returned EMPTY")
                     }
 
                     SongItem(
