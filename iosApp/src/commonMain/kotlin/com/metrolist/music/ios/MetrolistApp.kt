@@ -58,9 +58,8 @@ private enum class Tab(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MetrolistApp() {
+fun MetrolistApp(player: AudioPlayer, session: AccountSession) {
     val client = remember { MetrolistClient() }
-    val player = remember { AudioPlayer() }
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(Tab.Home) }
     var home by remember { mutableStateOf<List<HomePage.Section>?>(null) }
@@ -83,7 +82,7 @@ fun MetrolistApp() {
         scope.launch {
             client.playbackSource(item)
                 .onSuccess {
-                    player.play(it)
+                    player.play(it.url, it.headers, item.title, item.subtitle())
                     nowPlaying = item
                     playing = true
                 }.onFailure { playbackError = it.message ?: "Unable to play this item" }
@@ -118,9 +117,20 @@ fun MetrolistApp() {
     }
 
     LaunchedEffect(Unit) {
+        player.configure(object : PlaybackListener {
+            override fun onState(state: PlaybackState) { playing = state.playing; playbackError = state.error }
+            override fun onEnded() { playing = false }
+            override fun onNext() = Unit
+            override fun onPrevious() = Unit
+        })
+        client.setSession(session.cookie)
         client.home()
             .onSuccess { home = it.sections }
             .onFailure { homeError = it.message ?: "Home could not be loaded" }
+    }
+
+    androidx.compose.runtime.DisposableEffect(player) {
+        onDispose { player.close() }
     }
 
     MaterialTheme {
