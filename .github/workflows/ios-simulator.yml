@@ -59,8 +59,11 @@ jobs:
 
       - name: Launch simulator app
         run: |
-          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for ds in json.load(sys.stdin)["devices"].values() for d in ds if d["name"].startswith("iPhone")))')
-          xcrun simctl boot "$DEVICE_ID"
+          DEVICE_INFO=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=[d for ds in json.load(sys.stdin)["devices"].values() for d in ds if d["name"].startswith("iPhone")]; device=next((d for d in devices if d["state"] == "Booted"), devices[0]); print(device["udid"], device["state"])')
+          read -r DEVICE_ID DEVICE_STATE <<< "$DEVICE_INFO"
+          if [ "$DEVICE_STATE" = "Shutdown" ]; then
+            xcrun simctl boot "$DEVICE_ID"
+          fi
           xcrun simctl bootstatus "$DEVICE_ID" -b
           xcrun simctl install "$DEVICE_ID" iosApp/build/xcode-derived/Build/Products/Debug-iphonesimulator/Metrolist.app
           xcrun simctl launch "$DEVICE_ID" com.metrolist.music.ios
