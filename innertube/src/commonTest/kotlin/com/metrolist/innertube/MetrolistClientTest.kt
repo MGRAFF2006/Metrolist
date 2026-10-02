@@ -34,6 +34,10 @@ class MetrolistClientTest {
             client.library(continuation = "next-page").getOrThrow()
             client.setSession(null)
             client.library().getOrThrow()
+            val context = Json.parseToJsonElement(bodies[0]) as kotlinx.serialization.json.JsonObject
+            val clientIdentity = ((context["context"] as kotlinx.serialization.json.JsonObject)["client"] as kotlinx.serialization.json.JsonObject)
+            kotlin.test.assertTrue((clientIdentity["gl"] as kotlinx.serialization.json.JsonPrimitive).content.isNotBlank())
+            kotlin.test.assertTrue((clientIdentity["hl"] as kotlinx.serialization.json.JsonPrimitive).content.isNotBlank())
             assertNotNull(authorizations[0])
             assertNotNull(authorizations[1])
             assertNull(authorizations[2])

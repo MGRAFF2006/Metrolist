@@ -24,7 +24,10 @@ import io.ktor.client.call.body
 class MetrolistClient(
     private val httpClient: HttpClient = createPlatformHttpClient(),
 ) {
-    private val innerTube = InnerTubeX(httpClient)
+    private val innerTube = InnerTubeX(httpClient).apply {
+        // A language-only system locale has no country; YouTube rejects an empty gl.
+        locale = locale.copy(gl = locale.gl.ifBlank { "US" }, hl = locale.hl.ifBlank { "en" })
+    }
     private val cipherService = YouTubeCipherService(httpClient)
     private val extractor =
         InnerTubeExtractor(
