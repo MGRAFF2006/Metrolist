@@ -1,35 +1,12 @@
 @file:Suppress("UnstableApiUsage")
 
-import org.gradle.api.artifacts.ComponentMetadataContext
-import org.gradle.api.artifacts.ComponentMetadataRule
 
 val useMavenLocalInnerTubeX = providers.gradleProperty("useMavenLocalInnerTubeX").isPresent
-
-abstract class FixInnerTubeXNativeMetadata : ComponentMetadataRule {
-    override fun execute(context: ComponentMetadataContext) {
-        val target = context.details.id.name.removePrefix("innertubex-")
-            .replace("iossimulator", "iosSimulator")
-            .replace("arm64", "Arm64")
-        context.details.withVariant("${target}MetadataElements-published") {
-            withFiles {
-                removeAllFiles()
-                addFile("${context.details.id.name}-${context.details.id.version}.klib")
-            }
-        }
-    }
-}
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kotlin.multiplatform.library)
     alias(libs.plugins.kotlin.serialization)
-}
-
-dependencies {
-    components {
-        withModule<FixInnerTubeXNativeMetadata>("com.github.MetrolistGroup.innertubex:innertubex-iosarm64")
-        withModule<FixInnerTubeXNativeMetadata>("com.github.MetrolistGroup.innertubex:innertubex-iossimulatorarm64")
-    }
 }
 
 kotlin {
