@@ -2,6 +2,8 @@ name: Build iOS Simulator
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths: ["iosApp/**", "innertube/**", "gradle/**", "*.gradle.kts", ".github/workflows/ios-simulator.yml"]
   push:
     branches: ["feat/ios-support"]
     paths:
@@ -13,6 +15,7 @@ on:
       - "settings.gradle.kts"
       - "gradlew"
       - "gradlew.bat"
+      - "gradle.properties"
 
 permissions:
   contents: read
@@ -38,6 +41,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      - name: Test shared client and playback
+        run: ./gradlew :innertube:desktopTest :iosApp:desktopTest :innertube:iosSimulatorArm64Test :iosApp:iosSimulatorArm64Test
+
       - name: Build simulator app
         run: |
           chmod +x gradlew
@@ -51,11 +57,48 @@ jobs:
             ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO
 
+      - name: Launch simulator app
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for ds in json.load(sys.stdin)["devices"].values() for d in ds if d["name"].startswith("iPhone")))')
+          xcrun simctl boot "$DEVICE_ID"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl install "$DEVICE_ID" iosApp/build/xcode-derived/Build/Products/Debug-iphonesimulator/Metrolist.app
+          xcrun simctl launch "$DEVICE_ID" com.metrolist.music.ios
+          sleep 15
+          xcrun simctl spawn "$DEVICE_ID" launchctl list | awk '$3 ~ /com.metrolist.music.ios/ && $1 ~ /^[0-9]+$/ { running = 1 } END { exit !running }'
+          xcrun simctl io "$DEVICE_ID" screenshot iosApp/build/simulator.png
+          xcrun simctl terminate "$DEVICE_ID" com.metrolist.music.ios
+
+      - name: Build unsigned device app
+        run: |
+          xcodebuild \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -sdk iphoneos \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath iosApp/build/xcode-device \
+            CODE_SIGNING_ALLOWED=NO
+
       - name: Package simulator app
         run: |
           ditto -c -k --sequesterRsrc --keepParent \
             iosApp/build/xcode-derived/Build/Products/Debug-iphonesimulator/Metrolist.app \
             Metrolist-ios-simulator.zip
+
+      - name: Package unsigned device app
+        run: |
+          mkdir -p iosApp/build/unsigned/Payload
+          cp -R iosApp/build/xcode-device/Build/Products/Release-iphoneos/Metrolist.app iosApp/build/unsigned/Payload/
+          cd iosApp/build/unsigned
+          zip -qry Metrolist-unsigned.ipa Payload
+
+      - name: Upload unsigned device app
+        uses: actions/upload-artifact@v6
+        with:
+          name: Metrolist-iOS-Unsigned
+          path: iosApp/build/unsigned/Metrolist-unsigned.ipa
+          if-no-files-found: error
 
       - name: Upload simulator app
         uses: actions/upload-artifact@v6
@@ -63,3 +106,14 @@ jobs:
           name: Metrolist-iOS-Simulator
           path: Metrolist-ios-simulator.zip
           if-no-files-found: error
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Metrolist-iOS-Checks
+          path: |
+            iosApp/build/simulator.png
+            iosApp/build/reports/tests/
+            innertube/build/reports/tests/
+          if-no-files-found: ignore
