@@ -72,6 +72,7 @@ kotlin {
             kotlin.srcDir("src/test/kotlin")
             dependencies {
                 implementation(libs.junit)
+                implementation(libs.ktor.client.mock)
             }
         }
     }
