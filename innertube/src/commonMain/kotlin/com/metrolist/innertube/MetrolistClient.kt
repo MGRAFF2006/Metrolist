@@ -14,6 +14,7 @@ import com.metrolist.innertube.pages.SearchPage
 import com.metrolist.innertube.pages.SearchResult
 import com.metrolist.innertubex.InnerTube as InnerTubeX
 import com.metrolist.innertubex.cipher.YouTubeCipherService
+import com.metrolist.innertubex.extraction.AudioQuality
 import com.metrolist.innertubex.extraction.ContentHints
 import com.metrolist.innertubex.extraction.InnerTubeExtractor
 import com.metrolist.innertubex.extraction.YtConfigParserImpl
@@ -129,6 +130,8 @@ class MetrolistClient(
                 requireNotNull(
                     extractor.extract(
                         videoId = item.id,
+                        // AVPlayer supports AAC/MP4 and HLS, but not YouTube's WebM audio.
+                        audioQuality = AudioQuality.MP4,
                         hints =
                             ContentHints(isExplicit = explicit).withStreamCapabilities(
                                 allowHls = true,
