@@ -1,16 +1,15 @@
 package com.metrolist.innertube
 
 import com.metrolist.innertube.models.EpisodeItem
-import com.metrolist.innertube.models.GridRenderer
-import com.metrolist.innertube.models.MusicShelfRenderer
 import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.models.YTItem
-import com.metrolist.innertube.models.getContinuation
 import com.metrolist.innertube.models.getItems
+import com.metrolist.innertube.models.getContinuation
 import com.metrolist.innertube.models.response.BrowseResponse
 import com.metrolist.innertube.models.response.SearchResponse
+import com.metrolist.innertube.pages.ClientBrowsePage
 import com.metrolist.innertube.pages.HomePage
-import com.metrolist.innertube.pages.LibraryPage
+import kotlinx.coroutines.CancellationException
 import com.metrolist.innertube.pages.SearchPage
 import com.metrolist.innertube.pages.SearchResult
 import com.metrolist.innertubex.InnerTube as InnerTubeX
@@ -49,8 +48,8 @@ class MetrolistClient(
     }
 
     suspend fun home(): Result<HomePage> =
-        runCatching {
-            val response = innerTube.browse(WEB_REMIX, browseId = "FEmusic_home").body<BrowseResponse>()
+        cancellableResult {
+            val response = innerTube.browse(WEB_REMIX, browseId = "FEmusic_home", setLogin = true).body<BrowseResponse>()
             val sections =
                 response.contents
                     ?.singleColumnBrowseResultsRenderer
@@ -66,9 +65,9 @@ class MetrolistClient(
             HomePage(chips = null, sections = sections)
         }
 
-    suspend fun search(query: String): Result<SearchResult> =
-        runCatching {
-            val response = innerTube.search(WEB_REMIX, query = query).body<SearchResponse>()
+    suspend fun search(query: String, params: String? = null, continuation: String? = null): Result<SearchResult> =
+        cancellableResult {
+            val response = innerTube.search(WEB_REMIX, query = query.takeIf { continuation == null }, params = params, continuation = continuation, setLogin = true).body<SearchResponse>()
             val items = mutableListOf<YTItem>()
             response.contents
                 ?.tabbedSearchResultsRenderer
@@ -90,57 +89,34 @@ class MetrolistClient(
                         ?.mapNotNull(SearchPage::toYTItem)
                         ?.let(items::addAll)
                 }
-            SearchResult(items.distinctBy(YTItem::id))
+            val continued = response.continuationContents?.musicShelfContinuation
+            continued?.contents?.map { it.musicResponsiveListItemRenderer }?.mapNotNull(SearchPage::toYTItem)?.let(items::addAll)
+            val sections = response.contents?.tabbedSearchResultsRenderer?.tabs?.firstOrNull()
+                ?.tabRenderer?.content?.sectionListRenderer?.contents.orEmpty()
+            val next = continued?.continuations?.getContinuation()
+                ?: sections.firstNotNullOfOrNull { section ->
+                    section.musicShelfRenderer?.continuations?.getContinuation()
+                        ?: section.musicShelfRenderer?.contents?.getContinuation()
+                }
+            SearchResult(items.distinctBy { "${it::class.simpleName}:${it.id}" }, next)
         }
 
-    suspend fun library(browseId: String = "FEmusic_liked_videos"): Result<LibraryPage> =
-        runCatching {
-            val response =
-                innerTube
-                    .browse(WEB_REMIX, browseId = browseId, setLogin = true)
-                    .body<BrowseResponse>()
-            val contents =
-                response.contents
-                    ?.singleColumnBrowseResultsRenderer
-                    ?.tabs
-                    ?.firstOrNull()
-                    ?.tabRenderer
-                    ?.content
-                    ?.sectionListRenderer
-                    ?.contents
-                    ?.firstOrNull {
-                        it.gridRenderer != null || it.musicShelfRenderer != null || it.musicPlaylistShelfRenderer != null
-                    }
-            val grid = contents?.gridRenderer
-            val playlistShelf = contents?.musicPlaylistShelfRenderer
-            val shelf = contents?.musicShelfRenderer
-            when {
-                grid != null ->
-                    LibraryPage(
-                        grid.items
-                            .mapNotNull(GridRenderer.Item::musicTwoRowItemRenderer)
-                            .mapNotNull(LibraryPage::fromMusicTwoRowItemRenderer),
-                        grid.continuations?.getContinuation(),
-                    )
-                playlistShelf != null ->
-                    LibraryPage(
-                        playlistShelf.contents.getItems().mapNotNull(LibraryPage::fromMusicResponsiveListItemRenderer),
-                        playlistShelf.continuations?.getContinuation(),
-                    )
-                shelf != null ->
-                    LibraryPage(
-                        shelf.contents
-                            .orEmpty()
-                            .mapNotNull(MusicShelfRenderer.Content::musicResponsiveListItemRenderer)
-                            .mapNotNull(LibraryPage::fromMusicResponsiveListItemRenderer),
-                        shelf.continuations?.getContinuation(),
-                    )
-                else -> LibraryPage(emptyList(), null)
-            }
+    suspend fun browse(browseId: String, continuation: String? = null): Result<ClientBrowsePage> =
+        cancellableResult {
+            val response = innerTube.browse(
+                WEB_REMIX,
+                browseId = browseId.takeIf { continuation == null },
+                continuation = continuation,
+                setLogin = true,
+            ).body<BrowseResponse>()
+            ClientBrowsePage.fromResponse(response)
         }
+
+    suspend fun library(browseId: String = "FEmusic_liked_videos", continuation: String? = null): Result<ClientBrowsePage> =
+        browse(browseId, continuation)
 
     suspend fun playbackSource(item: YTItem): Result<PlaybackSource> =
-        runCatching {
+        cancellableResult {
             val explicit = when (item) {
                 is SongItem -> item.explicit
                 is EpisodeItem -> item.explicit
@@ -167,3 +143,12 @@ class MetrolistClient(
         httpClient.close()
     }
 }
+
+private suspend fun <T> cancellableResult(block: suspend () -> T): Result<T> =
+    try {
+        Result.success(block())
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        Result.failure(error)
+    }

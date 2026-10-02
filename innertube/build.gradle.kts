@@ -1,6 +1,5 @@
 @file:Suppress("UnstableApiUsage")
 
-
 val useMavenLocalInnerTubeX = providers.gradleProperty("useMavenLocalInnerTubeX").isPresent
 
 plugins {
@@ -17,6 +16,7 @@ kotlin {
         withHostTest {}
     }
 
+    jvm("desktop")
     iosArm64()
     iosSimulatorArm64()
 
@@ -41,6 +41,22 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.ktor.client.okhttp)
             implementation(libs.timber)
+        }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.kotlinxCoroutines.get()}")
+            implementation(libs.ktor.client.mock)
+        }
+        getByName("desktopMain") {
+            dependencies { implementation(libs.ktor.client.okhttp) }
+        }
+        getByName("desktopTest") {
+            kotlin.srcDirs(
+                "src/test/kotlin/com/metrolist/innertube/pages",
+                "src/test/kotlin/com/metrolist/innertube/models",
+                "src/test/kotlin/com/metrolist/innertube/utils",
+            )
+            dependencies { implementation(libs.junit) }
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
