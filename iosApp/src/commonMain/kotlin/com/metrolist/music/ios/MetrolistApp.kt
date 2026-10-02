@@ -251,11 +251,13 @@ fun MetrolistApp(player: AudioPlayer, session: AccountSession) {
                                     if (session.cookie == null) {
                                         client.setSession(null); signedIn = false; homeRevision++
                                     }
-                                } else session.signIn { cookie ->
-                                    if (cookie != null) {
-                                        client.setSession(cookie); signedIn = true; libraryRevision++; homeRevision++
+                                } else session.signIn(object : SignInListener {
+                                    override fun onComplete(cookie: String?) {
+                                        if (cookie != null) {
+                                            client.setSession(cookie); signedIn = true; libraryRevision++; homeRevision++
+                                        }
                                     }
-                                }
+                                })
                             }) { Text(if (signedIn) "Sign out" else "Sign in") }
                         }
                         if (signedIn) {

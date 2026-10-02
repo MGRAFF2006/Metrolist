@@ -6,7 +6,7 @@ import WebKit
 final class NativeAccountSession: NSObject, AccountSession, WKNavigationDelegate, UIAdaptivePresentationControllerDelegate {
     private let service = "com.metrolist.music.ios.session"
     private let account = "youtube-cookie"
-    private var completion: ((String?) -> KotlinUnit)?
+    private var completion: SignInListener?
     private var navigation: UINavigationController?
     private var webView: WKWebView?
     private var finishing = false
@@ -21,11 +21,11 @@ final class NativeAccountSession: NSObject, AccountSession, WKNavigationDelegate
         return String(data: data, encoding: .utf8)
     }
 
-    func signIn(onComplete: @escaping (String?) -> KotlinUnit) {
+    func signIn(onComplete: SignInListener) {
         guard completion == nil else { return }
         guard let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
               var presenter = scene.windows.first(where: \.isKeyWindow)?.rootViewController else {
-            _ = onComplete(nil)
+            onComplete.onComplete(cookie: nil)
             return
         }
         while let presented = presenter.presentedViewController { presenter = presented }
@@ -146,7 +146,7 @@ final class NativeAccountSession: NSObject, AccountSession, WKNavigationDelegate
         navigation = nil
         webView?.navigationDelegate = nil
         webView = nil
-        _ = callback?(cookie)
+        callback?.onComplete(cookie: cookie)
     }
 
     private func showError(_ message: String) {

@@ -28,6 +28,10 @@ data class PlaybackState(
 
 interface AccountSession {
     val cookie: String?
-    fun signIn(onComplete: (String?) -> Unit)
+    fun signIn(onComplete: SignInListener)
     fun signOut()
+}
+
+interface SignInListener {
+    fun onComplete(cookie: String?)
 }
