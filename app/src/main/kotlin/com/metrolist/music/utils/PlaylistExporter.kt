@@ -149,31 +149,29 @@ fun exportYouTubePlaylistAsM3U(
 private fun createExportFile(
     context: Context,
     filename: String,
+): File = createExportFile(File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "MetrolistExports"), filename)
+
+internal fun createExportFile(
+    exportDir: File,
+    filename: String,
 ): File {
     // Create directory if it doesn't exist
-    val exportDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "MetrolistExports")
     if (!exportDir.exists()) {
         exportDir.mkdirs()
     }
 
-    // Create file with unique name (add timestamp if file exists)
-    val baseFilename = filename.substringBeforeLast('.')
-    val extension = filename.substringAfterLast('.', "")
-    var exportFile = File(exportDir, filename)
+    val safeFilename = filename.replace('/', '_').replace('\\', '_').replace('\u0000', '_')
+    val baseFilename = safeFilename.substringBeforeLast('.').takeUnless { it.trim('.').isBlank() } ?: "Export"
+    val extension = safeFilename.substringAfterLast('.', "")
+    val suffix = if (extension.isNotEmpty()) ".$extension" else ""
+    var exportFile = File(exportDir, "$baseFilename$suffix")
     var counter = 1
 
-    while (exportFile.exists()) {
-        val newFilename =
-            if (extension.isNotEmpty()) {
-                "${baseFilename}_$counter.$extension"
-            } else {
-                "${baseFilename}_$counter"
-            }
-        exportFile = File(exportDir, newFilename)
+    while (!exportFile.createNewFile()) {
+        exportFile = File(exportDir, "${baseFilename}_$counter$suffix")
         counter++
     }
 
-    exportFile.createNewFile()
     return exportFile
 }
 
