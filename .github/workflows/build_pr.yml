@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: boat-large
     timeout-minutes: 20
 
     steps:
@@ -30,6 +30,12 @@ jobs:
         with:
           java-version: 21
           distribution: "temurin"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android platform and build tools
+        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
 
       - name: Set Up Gradle
         uses: gradle/actions/setup-gradle@v5
