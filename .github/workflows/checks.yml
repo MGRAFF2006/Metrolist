@@ -30,11 +30,19 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - name: Generate disposable FOSS debug keystore
+        run: |
+          keytool -genkeypair -noprompt \
+            -keystore "$RUNNER_TEMP/metrolist-foss-debug.keystore" \
+            -storepass android -keypass android -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Metrolist CI,O=Metrolist,C=US"
       - name: Build FOSS app and run unit tests
         run: ./gradlew --console=plain :app:assembleFossDebug :app:testFossDebugUnitTest :innertube:testDebugUnitTest --warning-mode summary
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           PULL_REQUEST: 'true'
+          METROLIST_DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/metrolist-foss-debug.keystore
       - name: Upload unit test reports
         if: always()
         uses: actions/upload-artifact@v4
