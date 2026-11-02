@@ -1,0 +1,136 @@
+name: Android checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Android build and unit tests
+    runs-on: boat-large
+    # Serial ceiling from the former FOSS 35 + GMS 20 minute jobs; unmeasured.
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v7
+        id: checkout
+        with:
+          # Exact PR base/head and merge-base are needed by the path selector.
+          fetch-depth: 0
+      - name: Select PR GMS build
+        id: select
+        run: python3 .github/scripts/select_gms.py
+      - uses: actions/setup-java@v6
+        id: java
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4
+        id: android
+        if: ${{ !cancelled() && steps.java.outcome == 'success' }}
+      - name: Install Android platform and build tools
+        id: sdk
+        if: ${{ !cancelled() && steps.android.outcome == 'success' }}
+        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v5
+        id: gradle
+        if: ${{ !cancelled() && steps.sdk.outcome == 'success' }}
+        with:
+          # One v5 setup replaces FOSS v4 and GMS v5; only main can write.
+          cache-read-only: ${{ github.event_name == 'pull_request' || github.ref != 'refs/heads/main' }}
+          cache-cleanup: on-success
+      - name: Grant execute permission for gradlew
+        id: executable
+        if: ${{ !cancelled() && steps.gradle.outcome == 'success' }}
+        run: chmod +x gradlew
+      - name: Generate disposable FOSS debug keystore
+        id: foss_key
+        if: ${{ !cancelled() && steps.executable.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          keytool -genkeypair -noprompt \
+            -keystore "$RUNNER_TEMP/metrolist-foss-debug.keystore" \
+            -storepass android -keypass android -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Metrolist CI,O=Metrolist,C=US"
+      - name: Build FOSS app and run unit tests
+        id: foss
+        timeout-minutes: 35
+        if: ${{ !cancelled() && steps.foss_key.outcome == 'success' }}
+        run: ./gradlew --console=plain :app:assembleFossDebug :app:testFossDebugUnitTest :innertube:testDebugUnitTest --warning-mode summary
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST: 'true'
+          METROLIST_DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/metrolist-foss-debug.keystore
+      - name: Upload unit test reports
+        id: foss_reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: |
+            app/build/reports/tests/
+            innertube/build/reports/tests/
+          if-no-files-found: ignore
+      - name: Restore PR debug keystore
+        id: pr_keystore
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (steps.select.outcome != 'success' || steps.select.outputs.gms != 'false') && steps.executable.outcome == 'success' }}
+        uses: actions/cache/restore@v6
+        with:
+          path: app/pr-debug.keystore
+          key: pr-debug-keystore-${{ github.event.number }}
+      - name: Generate PR debug keystore if not cached
+        id: gms_key
+        if: ${{ !cancelled() && steps.pr_keystore.outcome == 'success' && steps.pr_keystore.outputs.cache-hit != 'true' }}
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -v \
+            -keystore app/pr-debug.keystore \
+            -storepass android -keypass android -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Metrolist PR $PR_NUMBER,O=Metrolist,C=US"
+      - name: Save PR debug keystore
+        id: save_key
+        if: ${{ !cancelled() && steps.gms_key.outcome == 'success' }}
+        uses: actions/cache/save@v6
+        with:
+          path: app/pr-debug.keystore
+          key: ${{ steps.pr_keystore.outputs.cache-primary-key }}
+      - name: Build GMS Debug APK
+        id: gms
+        timeout-minutes: 20
+        if: ${{ !cancelled() && steps.pr_keystore.outcome == 'success' && (steps.pr_keystore.outputs.cache-hit == 'true' || steps.gms_key.outcome == 'success') }}
+        run: ./gradlew --console=plain assembleGmsDebug --warning-mode summary
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          METROLIST_APPLICATION_ID: com.metrolist.music.pr.p${{ github.event.number }}
+          METROLIST_APP_NAME: Metrolist PR ${{ github.event.number }}
+          METROLIST_DEBUG_KEYSTORE_PATH: pr-debug.keystore
+          PULL_REQUEST: 'true'
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
+      - name: Upload APK
+        id: gms_apk
+        if: ${{ !cancelled() && steps.gms.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-universal-debug-pr-${{ github.event.number }}
+          path: app/build/outputs/apk/gms/debug/*.apk
+      - name: Require all selected checks
+        if: always()
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+          GMS_SELECTED: ${{ github.event_name == 'pull_request' && (steps.select.outcome != 'success' || steps.select.outputs.gms != 'false') }}
+        run: python3 .github/scripts/check_ci_results.py
