@@ -84,7 +84,7 @@ jobs:
           if-no-files-found: ignore
       - name: Restore PR debug keystore
         id: pr_keystore
-        if: ${{ !cancelled() && github.event_name == 'pull_request' && steps.select.outputs.gms != 'false' && steps.executable.outcome == 'success' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (steps.select.outcome != 'success' || steps.select.outputs.gms != 'false') && steps.executable.outcome == 'success' }}
         uses: actions/cache/restore@v6
         with:
           path: app/pr-debug.keystore
@@ -132,5 +132,5 @@ jobs:
         if: always()
         env:
           STEPS_JSON: ${{ toJSON(steps) }}
-          GMS_SELECTED: ${{ github.event_name == 'pull_request' && steps.select.outputs.gms != 'false' }}
+          GMS_SELECTED: ${{ github.event_name == 'pull_request' && (steps.select.outcome != 'success' || steps.select.outputs.gms != 'false') }}
         run: python3 .github/scripts/check_ci_results.py

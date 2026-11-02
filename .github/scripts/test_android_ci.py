@@ -1,9 +1,11 @@
 """Cheap contract checks; no Android builds, network or runner allocation."""
 import copy
+import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -105,6 +107,20 @@ class Selection(unittest.TestCase):
         for event in ['push', 'workflow_dispatch']:
             self.assertFalse(self.selected(event=event))
 
+    def test_summary_failure_can_leave_an_exclusion_output(self):
+        self.write('fastlane/changed')
+        head = self.commit()
+        event = self.repo / 'event.json'
+        event.write_text(json.dumps({'pull_request': {'base': {'sha': self.base},
+                                                      'head': {'sha': head}}}))
+        output = self.repo / 'output'
+        env = dict(os.environ, GITHUB_EVENT_NAME='pull_request', GITHUB_EVENT_PATH=str(event),
+                   GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(self.repo / 'absent' / 'summary'))
+        result = subprocess.run([sys.executable, str(Path(__file__).with_name('select_gms.py'))],
+                                cwd=self.repo, env=env, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('gms=false', output.read_text())
+
 
 class Outcomes(unittest.TestCase):
     def setUp(self):
@@ -139,7 +155,9 @@ class Outcomes(unittest.TestCase):
         self.fail('missing step ' + name)
 
     def runs(self, name, gms='true'):
-        expression = self.condition(name)
+        return self.evaluate(self.condition(name), gms)
+
+    def evaluate(self, expression, gms='true'):
         expression = expression.replace('!cancelled()', 'True')
         expression = expression.replace("github.event_name", repr('pull_request'))
         expression = expression.replace('steps.select.outputs.gms', repr(gms))
@@ -165,6 +183,15 @@ class Outcomes(unittest.TestCase):
         for name in ['java', 'android', 'sdk', 'gradle', 'executable', 'foss_key', 'foss', 'pr_keystore', 'gms']:
             self.assertTrue(self.runs(name), name)
         self.assertTrue(failures(self.steps, True))
+
+    def test_failed_selector_exclusion_is_not_trusted_by_scheduling_or_gate(self):
+        self.steps['select']['outcome'] = 'failure'
+        self.assertTrue(self.runs('pr_keystore', 'false'))
+        workflow = Path(__file__).parents[1] / 'workflows/checks.yml'
+        expression = re.search(r'GMS_SELECTED: \$\{\{ (.*) \}\}', workflow.read_text())[1]
+        self.assertTrue(self.evaluate(expression, 'false'))
+        self.steps['gms']['outcome'] = 'skipped'
+        self.assertIn('gms', failures(self.steps, self.evaluate(expression, 'false')))
 
     def test_shared_and_signing_failure_blocks_only_dependent_steps(self):
         self.steps['gradle']['outcome'] = 'failure'
