@@ -75,7 +75,7 @@ jobs:
       - name: Upload unit test reports
         id: foss_reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unit-test-reports
           path: |
